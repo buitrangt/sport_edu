@@ -101,4 +101,54 @@ public class TeamController {
                     .body(ApiResponse.error(e.getMessage()));
         }
     }
+
+    /**
+     * 3.6 Approve Team Registration (Admin Only)
+     * PUT /api/teams/{id}/approve
+     */
+    @PutMapping("/api/teams/{id}/approve")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('ORGANIZER')")
+    public ResponseEntity<ApiResponse<TeamResponseDTO>> approveTeam(@PathVariable Long id) {
+        try {
+            TeamResponseDTO response = teamService.approveTeam(id);
+            return ResponseEntity.ok(ApiResponse.success("Team approved successfully", response));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    /**
+     * 3.7 Reject Team Registration (Admin Only)
+     * PUT /api/teams/{id}/reject
+     */
+    @PutMapping("/api/teams/{id}/reject")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('ORGANIZER')")
+    public ResponseEntity<ApiResponse<TeamResponseDTO>> rejectTeam(@PathVariable Long id) {
+        try {
+            TeamResponseDTO response = teamService.rejectTeam(id);
+            return ResponseEntity.ok(ApiResponse.success("Team rejected successfully", response));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    /**
+     * 3.8 Update Team Registration Status (Admin Only)
+     * PUT /api/teams/{id}/status
+     */
+    @PutMapping("/api/teams/{id}/status")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('ORGANIZER')")
+    public ResponseEntity<ApiResponse<TeamResponseDTO>> updateTeamStatus(
+            @PathVariable Long id,
+            @RequestParam String status) {
+        try {
+            TeamResponseDTO response = teamService.updateTeamRegistrationStatus(id, status);
+            return ResponseEntity.ok(ApiResponse.success("Team status updated successfully", response));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(e.getMessage()));
+        }
+    }
 }

@@ -59,6 +59,10 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/teams/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/matches/**").permitAll()
                         
+                        // Public file access
+                        .requestMatchers(HttpMethod.GET, "/api/files/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/public/**").permitAll()
+                        
                         // Authenticated endpoints
                         .requestMatchers("/api/v1/news/**").authenticated()
                         .requestMatchers("/api/tournaments/**").authenticated()

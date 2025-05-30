@@ -15,8 +15,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import javax.validation.Valid;
+import org.springframework.web.multipart.MultipartFile;
 
 
 @RestController
@@ -24,6 +26,7 @@ import javax.validation.Valid;
 @RequiredArgsConstructor
 public class TournamentController {
     private final TournamentService tournamentService;
+    private final ObjectMapper objectMapper;
 
     @GetMapping
     public PaginatedResponseDTO<TournamentResponseDTO> getAllTournaments(TournamentRequestDTO request) {
@@ -46,6 +49,34 @@ public class TournamentController {
     public ResponseEntity<ApiResponse<TournamentCreateResponseDTO>> createTournament(@Valid @RequestBody TournamentRequestDTO request) {
         try {
             TournamentCreateResponseDTO tournament = tournamentService.createTournament(request);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success("Tournament created successfully", tournament));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("Failed to create tournament: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping(value = "/with-image", consumes = "multipart/form-data")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_ORGANIZER')")
+    public ResponseEntity<ApiResponse<TournamentCreateResponseDTO>> createTournamentWithImage(
+            @RequestParam("tournament") String tournamentJson,
+            @RequestParam(value = "image", required = false) MultipartFile imageFile) {
+        
+        try {
+            // Debug logs
+            System.out.println("=== CONTROLLER DEBUG (v2) ===");
+            System.out.println("Tournament JSON: " + tournamentJson);
+            System.out.println("ImageFile parameter: " + (imageFile == null ? "NULL" : "NOT NULL"));
+            if (imageFile != null) {
+                System.out.println("ImageFile name: " + imageFile.getOriginalFilename());
+                System.out.println("ImageFile size: " + imageFile.getSize());
+            }
+            
+            // Parse JSON to DTO
+            TournamentRequestDTO request = objectMapper.readValue(tournamentJson, TournamentRequestDTO.class);
+            
+            TournamentCreateResponseDTO tournament = tournamentService.createTournamentWithImage(request, imageFile);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(ApiResponse.success("Tournament created successfully", tournament));
         } catch (Exception e) {

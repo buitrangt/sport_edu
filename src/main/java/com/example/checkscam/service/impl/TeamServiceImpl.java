@@ -108,7 +108,7 @@ public class TeamServiceImpl implements TeamService {
         TournamentRegistration registration = new TournamentRegistration();
         registration.setTournament(tournament);
         registration.setUser(currentUser);
-        registration.setStatus(TournamentRegistration.RegistrationStatus.APPROVED); // Auto approve for now
+        registration.setStatus(TournamentRegistration.RegistrationStatus.PENDING); // Set to PENDING for admin approval
         registration.setRegistrationDate(LocalDateTime.now());
         registration.setNotes(request.getNotes());
         registration.setCreatedAt(currentTime);
@@ -258,13 +258,120 @@ public class TeamServiceImpl implements TeamService {
         teamRepository.delete(team);
     }
 
+    @Override
+    public TeamResponseDTO approveTeam(Long teamId) {
+        // Get current user
+        String email = SecurityUtil.getCurrentUserLogin()
+                .orElseThrow(() -> new InvalidParamException("User not authenticated"));
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new DataNotFoundException("User not found"));
+
+        // Get team with registration
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new DataNotFoundException("Team not found with id: " + teamId));
+
+        // Get tournament registration for this team
+        TournamentRegistration registration = registrationRepository
+                .findByTournamentAndUser(team.getTournament(), team.getCaptain())
+                .orElseThrow(() -> new DataNotFoundException("Registration not found for this team"));
+
+        // Update registration status to APPROVED
+        registration.setStatus(TournamentRegistration.RegistrationStatus.APPROVED);
+        registration.setLastUpdatedAt(Instant.now().toEpochMilli());
+        registration.setLastUpdatedBy(currentUser);
+        registrationRepository.save(registration);
+
+        log.info("Team {} approved by admin {}", team.getName(), currentUser.getEmail());
+        
+        return convertToTeamResponseDTO(team);
+    }
+
+    @Override
+    public TeamResponseDTO rejectTeam(Long teamId) {
+        // Get current user
+        String email = SecurityUtil.getCurrentUserLogin()
+                .orElseThrow(() -> new InvalidParamException("User not authenticated"));
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new DataNotFoundException("User not found"));
+
+        // Get team with registration
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new DataNotFoundException("Team not found with id: " + teamId));
+
+        // Get tournament registration for this team
+        TournamentRegistration registration = registrationRepository
+                .findByTournamentAndUser(team.getTournament(), team.getCaptain())
+                .orElseThrow(() -> new DataNotFoundException("Registration not found for this team"));
+
+        // Update registration status to REJECTED
+        registration.setStatus(TournamentRegistration.RegistrationStatus.REJECTED);
+        registration.setLastUpdatedAt(Instant.now().toEpochMilli());
+        registration.setLastUpdatedBy(currentUser);
+        registrationRepository.save(registration);
+
+        log.info("Team {} rejected by admin {}", team.getName(), currentUser.getEmail());
+        
+        return convertToTeamResponseDTO(team);
+    }
+
+    @Override
+    public TeamResponseDTO updateTeamRegistrationStatus(Long teamId, String status) {
+        // Get current user
+        String email = SecurityUtil.getCurrentUserLogin()
+                .orElseThrow(() -> new InvalidParamException("User not authenticated"));
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new DataNotFoundException("User not found"));
+
+        // Get team with registration
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new DataNotFoundException("Team not found with id: " + teamId));
+
+        // Get tournament registration for this team
+        TournamentRegistration registration = registrationRepository
+                .findByTournamentAndUser(team.getTournament(), team.getCaptain())
+                .orElseThrow(() -> new DataNotFoundException("Registration not found for this team"));
+
+        // Validate and set status
+        TournamentRegistration.RegistrationStatus newStatus;
+        try {
+            newStatus = TournamentRegistration.RegistrationStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidParamException("Invalid status: " + status + ". Valid values are: PENDING, APPROVED, REJECTED");
+        }
+
+        // Update registration status
+        registration.setStatus(newStatus);
+        registration.setLastUpdatedAt(Instant.now().toEpochMilli());
+        registration.setLastUpdatedBy(currentUser);
+        registrationRepository.save(registration);
+
+        log.info("Team {} status updated to {} by admin {}", team.getName(), newStatus, currentUser.getEmail());
+        
+        return convertToTeamResponseDTO(team);
+    }
+
     private TeamResponseDTO convertToTeamResponseDTO(Team team) {
+        // Get registration status
+        TournamentRegistration registration = registrationRepository
+                .findByTournamentAndUser(team.getTournament(), team.getCaptain())
+                .orElse(null);
+        
+        String registrationStatus = "PENDING";
+        String registrationDate = null;
+        
+        if (registration != null) {
+            registrationStatus = registration.getStatus().name();
+            registrationDate = registration.getRegistrationDate() != null 
+                    ? registration.getRegistrationDate().format(DATE_FORMATTER) : null;
+        }
+        
         return TeamResponseDTO.builder()
                 .id(team.getId())
                 .name(team.getName())
                 .teamColor(team.getTeamColor())
                 .memberCount(team.getMemberCount())
                 .status(team.getStatus().name())
+                .registrationStatus(registrationStatus)
                 .logoUrl(team.getLogoUrl())
                 .contactInfo(team.getContactInfo())
                 .captain(TeamResponseDTO.CaptainDTO.builder()
@@ -273,6 +380,7 @@ public class TeamServiceImpl implements TeamService {
                         .email(team.getCaptain().getEmail())
                         .build())
                 .createdAt(formatTimestamp(team.getCreatedAt()))
+                .registrationDate(registrationDate)
                 .build();
     }
 

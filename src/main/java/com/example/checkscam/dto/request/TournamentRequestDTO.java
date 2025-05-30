@@ -13,12 +13,14 @@ public class TournamentRequestDTO {
     private Integer page = 1;
     private Integer limit = 10;
     private String status;
-    private String sportType;
     private String search;
     
     // For create/update operations
     @NotBlank(message = "Tournament name is required")
     private String name;
+    
+    @NotBlank(message = "Sport type is required")
+    private String sportType;
     
     private String description;
     

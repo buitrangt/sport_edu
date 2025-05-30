@@ -16,11 +16,13 @@ public class TeamResponseDTO {
     private String name;
     private String teamColor;
     private int memberCount;
-    private String status;
+    private String status; // Team status (ACTIVE, ELIMINATED, WITHDRAWN)
+    private String registrationStatus; // Registration status (PENDING, APPROVED, REJECTED)
     private String logoUrl;
     private String contactInfo;
     private CaptainDTO captain;
     private String createdAt;
+    private String registrationDate;
     
     // For detailed team view
     private TournamentDTO tournament;

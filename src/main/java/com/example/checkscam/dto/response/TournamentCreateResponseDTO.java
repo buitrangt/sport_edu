@@ -16,4 +16,6 @@ public class TournamentCreateResponseDTO {
     
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'")
     private LocalDateTime createdAt;
+    
+    private String imageUrl;
 }

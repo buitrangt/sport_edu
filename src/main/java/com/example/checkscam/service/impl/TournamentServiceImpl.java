@@ -18,7 +18,9 @@ import com.example.checkscam.repository.TeamRepository;
 import com.example.checkscam.repository.UserRepository;
 import com.example.checkscam.repository.MatchRepository;
 import com.example.checkscam.service.TournamentService;
+import com.example.checkscam.service.FileUploadService;
 import com.example.checkscam.util.SecurityUtil;
+import org.springframework.web.multipart.MultipartFile;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -39,6 +41,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final MatchRepository matchRepository;
+    private final FileUploadService fileUploadService;
 
     @Override
     public PaginatedResponseDTO<TournamentResponseDTO> getAllTournaments(TournamentRequestDTO request) {
@@ -98,6 +101,7 @@ public class TournamentServiceImpl implements TournamentService {
         dto.setRules(tournament.getRules());
         dto.setPrizeInfo(tournament.getPrizeInfo());
         dto.setContactInfo(tournament.getContactInfo());
+        dto.setImageUrl(tournament.getImageUrl());
 
         // Convert created_at (Long) to LocalDateTime
         if (tournament.getCreatedAt() != null) {
@@ -280,6 +284,59 @@ public class TournamentServiceImpl implements TournamentService {
         responseDTO.setCurrentTeams(0);
         responseDTO.setCreatedAt(LocalDateTime.ofInstant(
                 Instant.ofEpochMilli(savedTournament.getCreatedAt()), ZoneId.of("UTC")));
+        
+        return responseDTO;
+    }
+
+    @Override
+    @Transactional
+    public TournamentCreateResponseDTO createTournamentWithImage(TournamentRequestDTO request, MultipartFile imageFile) {
+        // Get current user
+        String currentUserEmail = SecurityUtil.getCurrentUserLogin()
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new DataNotFoundException("User not found"));
+
+        String imageUrl = null;
+        
+        // Handle image upload if provided
+        if (imageFile != null && !imageFile.isEmpty()) {
+            if (fileUploadService.isValidImageFile(imageFile)) {
+                imageUrl = fileUploadService.uploadTournamentImage(imageFile);
+            } else {
+                throw new RuntimeException("Invalid image file format or size");
+            }
+        }
+
+        Tournament tournament = new Tournament();
+        tournament.setName(request.getName());
+        tournament.setSportType(request.getSportType());
+        tournament.setDescription(request.getDescription());
+        tournament.setMaxTeams(request.getMaxTeams());
+        tournament.setStartDate(request.getStartDate());
+        tournament.setEndDate(request.getEndDate());
+        tournament.setLocation(request.getLocation());
+        tournament.setRegistrationDeadline(request.getRegistrationDeadline());
+        tournament.setRules(request.getRules());
+        tournament.setPrizeInfo(request.getPrizeInfo());
+        tournament.setContactInfo(request.getContactInfo());
+        tournament.setImageUrl(imageUrl);
+        tournament.setStatus(TournamentStatus.REGISTRATION);
+        tournament.setCreatedAt(System.currentTimeMillis());
+        tournament.setCreatedBy(currentUser);
+
+        Tournament savedTournament = tournamentRepository.save(tournament);
+        
+        // Create response DTO for creation
+        TournamentCreateResponseDTO responseDTO = new TournamentCreateResponseDTO();
+        responseDTO.setId(savedTournament.getId());
+        responseDTO.setName(savedTournament.getName());
+        responseDTO.setSportType(savedTournament.getSportType());
+        responseDTO.setStatus(savedTournament.getStatus());
+        responseDTO.setCurrentTeams(0);
+        responseDTO.setCreatedAt(LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(savedTournament.getCreatedAt()), ZoneId.of("UTC")));
+        responseDTO.setImageUrl(savedTournament.getImageUrl());
         
         return responseDTO;
     }

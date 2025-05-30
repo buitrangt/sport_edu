@@ -29,4 +29,19 @@ public interface TeamService {
      * Delete team
      */
     void deleteTeam(Long teamId);
+    
+    /**
+     * Approve team registration (Admin only)
+     */
+    TeamResponseDTO approveTeam(Long teamId);
+    
+    /**
+     * Reject team registration (Admin only)
+     */
+    TeamResponseDTO rejectTeam(Long teamId);
+    
+    /**
+     * Update team registration status (Admin only)
+     */
+    TeamResponseDTO updateTeamRegistrationStatus(Long teamId, String status);
 }

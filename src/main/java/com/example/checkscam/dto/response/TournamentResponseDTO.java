@@ -34,7 +34,7 @@ public class TournamentResponseDTO {
     private String rules;
     private String prizeInfo;
     private String contactInfo;
-
+    private String imageUrl;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'")
     private LocalDateTime createdAt;

@@ -7,6 +7,7 @@ import com.example.checkscam.dto.response.TournamentCreateResponseDTO;
 import com.example.checkscam.dto.response.TournamentUpdateResponseDTO;
 import com.example.checkscam.dto.response.TournamentStartResponseDTO;
 import com.example.checkscam.dto.response.CurrentRoundResponseDTO;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface TournamentService {
     PaginatedResponseDTO<TournamentResponseDTO> getAllTournaments(TournamentRequestDTO request);
@@ -14,6 +15,8 @@ public interface TournamentService {
     TournamentResponseDTO getTournamentById(Long id);
     
     TournamentCreateResponseDTO createTournament(TournamentRequestDTO request);
+    
+    TournamentCreateResponseDTO createTournamentWithImage(TournamentRequestDTO request, MultipartFile imageFile);
     
     TournamentUpdateResponseDTO updateTournament(Long id, TournamentRequestDTO request);
     

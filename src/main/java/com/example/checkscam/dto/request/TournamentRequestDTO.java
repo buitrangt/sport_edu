@@ -25,15 +25,13 @@ public class TournamentRequestDTO {
     @Min(value = 2, message = "Max teams must be at least 2")
     private Integer maxTeams;
     
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+    // Accept various date formats including ISO strings
     private LocalDateTime startDate;
     
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
     private LocalDateTime endDate;
     
     private String location;
     
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
     private LocalDateTime registrationDeadline;
     
     private String rules;

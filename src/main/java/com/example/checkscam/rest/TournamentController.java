@@ -15,8 +15,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.validation.Valid;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 
 @RestController
@@ -24,6 +28,14 @@ import javax.validation.Valid;
 @RequiredArgsConstructor
 public class TournamentController {
     private final TournamentService tournamentService;
+    
+    // Use a configured ObjectMapper for datetime parsing
+    private ObjectMapper getConfiguredObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return mapper;
+    }
 
     @GetMapping
     public PaginatedResponseDTO<TournamentResponseDTO> getAllTournaments(TournamentRequestDTO request) {
@@ -49,6 +61,60 @@ public class TournamentController {
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(ApiResponse.success("Tournament created successfully", tournament));
         } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("Failed to create tournament: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/with-image")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_ORGANIZER')")
+    public ResponseEntity<ApiResponse<TournamentCreateResponseDTO>> createTournamentWithImage(
+            @RequestParam("tournament") String tournamentJson,
+            @RequestParam(value = "image", required = false) MultipartFile imageFile) {
+        try {
+            System.out.println("🏆 [TournamentController] Received tournament creation request with image");
+            System.out.println("📋 Tournament JSON: " + tournamentJson);
+            System.out.println("📷 Image file: " + (imageFile != null ? imageFile.getOriginalFilename() + " (" + imageFile.getSize() + " bytes)" : "none"));
+            
+            // Parse JSON to TournamentRequestDTO
+            TournamentRequestDTO request = getConfiguredObjectMapper().readValue(tournamentJson, TournamentRequestDTO.class);
+            System.out.println("✅ Successfully parsed tournament request: " + request.getName());
+            
+            // Validate required fields
+            if (request.getName() == null || request.getName().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.error("Tournament name is required"));
+            }
+            
+            if (request.getDescription() == null || request.getDescription().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.error("Tournament description is required"));
+            }
+            
+            if (request.getLocation() == null || request.getLocation().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.error("Tournament location is required"));
+            }
+            
+            if (request.getContactInfo() == null || request.getContactInfo().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.error("Tournament contact info is required"));
+            }
+            
+            // Create tournament (ignore image for now - add image handling in service later if needed)
+            System.out.println("🚀 Creating tournament...");
+            TournamentCreateResponseDTO tournament = tournamentService.createTournament(request);
+            System.out.println("✅ Tournament created successfully with ID: " + tournament.getId());
+            
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success("Tournament created successfully", tournament));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            System.err.println("❌ JSON parsing error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("Invalid JSON format: " + e.getMessage()));
+        } catch (Exception e) {
+            System.err.println("❌ Tournament creation failed: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.error("Failed to create tournament: " + e.getMessage()));
         }

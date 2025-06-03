@@ -29,7 +29,7 @@ public class MatchServiceImpl implements MatchService {
     private final TournamentRepository tournamentRepository;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
-    
+
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
     @Override
@@ -39,7 +39,7 @@ public class MatchServiceImpl implements MatchService {
                 .orElseThrow(() -> new DataNotFoundException("Tournament not found with id: " + tournamentId));
 
         List<Match> matches;
-        
+
         // Apply filters based on parameters
         if (round != null && status != null) {
             Match.MatchStatus matchStatus = parseMatchStatus(status);
@@ -91,7 +91,7 @@ public class MatchServiceImpl implements MatchService {
         // Check if user has permission (ADMIN or ORGANIZER)
         boolean hasPermission = currentUser.getRoles().stream()
                 .anyMatch(role -> "ADMIN".equals(role.getName()) || "ORGANIZER".equals(role.getName()));
-        
+
         // Temporary disable permission check for testing
         log.info("Create match - User: {}, HasPermission: {}", currentUser.getEmail(), hasPermission);
         // if (!hasPermission) {
@@ -105,7 +105,7 @@ public class MatchServiceImpl implements MatchService {
         // Validate teams
         Team team1 = teamRepository.findById(request.getTeam1Id())
                 .orElseThrow(() -> new DataNotFoundException("Team 1 not found with id: " + request.getTeam1Id()));
-        
+
         Team team2 = teamRepository.findById(request.getTeam2Id())
                 .orElseThrow(() -> new DataNotFoundException("Team 2 not found with id: " + request.getTeam2Id()));
 
@@ -113,7 +113,7 @@ public class MatchServiceImpl implements MatchService {
         if (!team1.getTournament().getId().equals(tournamentId)) {
             throw new InvalidParamException("Team 1 does not belong to this tournament");
         }
-        
+
         if (!team2.getTournament().getId().equals(tournamentId)) {
             throw new InvalidParamException("Team 2 does not belong to this tournament");
         }
@@ -126,11 +126,12 @@ public class MatchServiceImpl implements MatchService {
         // Check if teams are already playing against each other in the same round
         List<Match> existingMatches = matchRepository.findByTournamentAndRound(tournament, request.getRoundNumber());
         boolean teamsAlreadyMatched = existingMatches.stream()
-                .anyMatch(match -> 
-                    (match.getTeam1().getId().equals(request.getTeam1Id()) && match.getTeam2().getId().equals(request.getTeam2Id())) ||
-                    (match.getTeam1().getId().equals(request.getTeam2Id()) && match.getTeam2().getId().equals(request.getTeam1Id()))
+                .anyMatch(match ->
+                        (match.getTeam1() != null && match.getTeam2() != null) &&
+                                ((match.getTeam1().getId().equals(request.getTeam1Id()) && match.getTeam2().getId().equals(request.getTeam2Id())) ||
+                                        (match.getTeam1().getId().equals(request.getTeam2Id()) && match.getTeam2().getId().equals(request.getTeam1Id())))
                 );
-        
+
         if (teamsAlreadyMatched) {
             throw new InvalidParamException("These teams are already scheduled to play against each other in this round");
         }
@@ -151,7 +152,7 @@ public class MatchServiceImpl implements MatchService {
 
         // Create match
         long currentTime = Instant.now().toEpochMilli();
-        
+
         Match match = new Match();
         match.setTournament(tournament);
         match.setRoundNumber(request.getRoundNumber());
@@ -222,7 +223,7 @@ public class MatchServiceImpl implements MatchService {
         // Check if user has permission (ADMIN or ORGANIZER)
         boolean hasPermission = currentUser.getRoles().stream()
                 .anyMatch(role -> "ADMIN".equals(role.getName()) || "ORGANIZER".equals(role.getName()));
-        
+
         // Temporary disable permission check for testing
         log.info("Update match score - User: {}, HasPermission: {}", currentUser.getEmail(), hasPermission);
         // if (!hasPermission) {
@@ -234,7 +235,7 @@ public class MatchServiceImpl implements MatchService {
 
         // Validate status
         Match.MatchStatus newStatus = parseMatchStatus(request.getStatus());
-        
+
         // Update match scores and status
         match.setTeam1Score(request.getTeam1Score());
         match.setTeam2Score(request.getTeam2Score());
@@ -246,7 +247,7 @@ public class MatchServiceImpl implements MatchService {
         // Determine winner if match is completed
         Team winner = null;
         boolean nextMatchGenerated = false;
-        
+
         if (newStatus == Match.MatchStatus.COMPLETED) {
             if (request.getTeam1Score() > request.getTeam2Score()) {
                 winner = match.getTeam1();
@@ -254,9 +255,9 @@ public class MatchServiceImpl implements MatchService {
                 winner = match.getTeam2();
             }
             // If scores are equal, no winner is set (draw)
-            
+
             match.setWinnerTeam(winner);
-            
+
             // Generate next round match if needed
             if (winner != null) {
                 nextMatchGenerated = generateNextRoundMatch(match, winner);
@@ -289,7 +290,7 @@ public class MatchServiceImpl implements MatchService {
         // Check if user has permission (ADMIN or ORGANIZER)
         boolean hasPermission = currentUser.getRoles().stream()
                 .anyMatch(role -> "ADMIN".equals(role.getName()) || "ORGANIZER".equals(role.getName()));
-        
+
         // Temporary disable permission check for testing
         log.info("Update match status - User: {}, HasPermission: {}", currentUser.getEmail(), hasPermission);
         // if (!hasPermission) {
@@ -321,14 +322,14 @@ public class MatchServiceImpl implements MatchService {
                 .orElseThrow(() -> new DataNotFoundException("Tournament not found with id: " + tournamentId));
 
         List<Match> allMatches = matchRepository.findByTournamentWithDetails(tournament);
-        
+
         // Group matches by round
         Map<Integer, List<Match>> matchesByRound = allMatches.stream()
                 .collect(Collectors.groupingBy(Match::getRoundNumber));
 
         List<TournamentBracketResponseDTO.BracketDTO.RoundDTO> rounds = new ArrayList<>();
         Integer maxRound = matchRepository.findMaxRoundByTournament(tournament);
-        
+
         if (maxRound == null) {
             maxRound = 0;
         }
@@ -353,14 +354,14 @@ public class MatchServiceImpl implements MatchService {
         // Build rounds
         for (int roundNum = 1; roundNum <= maxRound; roundNum++) {
             List<Match> roundMatches = matchesByRound.getOrDefault(roundNum, new ArrayList<>());
-            
-            List<TournamentBracketResponseDTO.BracketDTO.RoundDTO.MatchBracketDTO> matchBracketDTOs = 
+
+            List<TournamentBracketResponseDTO.BracketDTO.RoundDTO.MatchBracketDTO> matchBracketDTOs =
                     roundMatches.stream()
-                    .map(this::convertToMatchBracketDTO)
-                    .collect(Collectors.toList());
+                            .map(this::convertToMatchBracketDTO)
+                            .collect(Collectors.toList());
 
             String roundName = generateRoundName(roundNum, maxRound);
-            
+
             rounds.add(TournamentBracketResponseDTO.BracketDTO.RoundDTO.builder()
                     .roundNumber(roundNum)
                     .roundName(roundName)
@@ -388,23 +389,25 @@ public class MatchServiceImpl implements MatchService {
                 .tournamentId(match.getTournament().getId())
                 .roundNumber(match.getRoundNumber())
                 .roundName(match.getRoundName())
-                .team1(MatchResponseDTO.TeamBasicDTO.builder()
-                        .id(match.getTeam1().getId())
-                        .name(match.getTeam1().getName())
-                        .logoUrl(match.getTeam1().getLogoUrl())
-                        .build())
-                .team2(MatchResponseDTO.TeamBasicDTO.builder()
-                        .id(match.getTeam2().getId())
-                        .name(match.getTeam2().getName())
-                        .logoUrl(match.getTeam2().getLogoUrl())
-                        .build())
-                .matchDate(match.getMatchDate() != null ? 
+                .team1(match.getTeam1() != null ?
+                        MatchResponseDTO.TeamBasicDTO.builder()
+                                .id(match.getTeam1().getId())
+                                .name(match.getTeam1().getName())
+                                .logoUrl(match.getTeam1().getLogoUrl())
+                                .build() : null)
+                .team2(match.getTeam2() != null ?
+                        MatchResponseDTO.TeamBasicDTO.builder()
+                                .id(match.getTeam2().getId())
+                                .name(match.getTeam2().getName())
+                                .logoUrl(match.getTeam2().getLogoUrl())
+                                .build() : null)
+                .matchDate(match.getMatchDate() != null ?
                         match.getMatchDate().format(DATE_FORMATTER) : null)
                 .location(match.getLocation())
                 .status(match.getStatus().name())
                 .team1Score(match.getTeam1Score())
                 .team2Score(match.getTeam2Score())
-                .winnerTeam(match.getWinnerTeam() != null ? 
+                .winnerTeam(match.getWinnerTeam() != null ?
                         MatchResponseDTO.TeamBasicDTO.builder()
                                 .id(match.getWinnerTeam().getId())
                                 .name(match.getWinnerTeam().getName())
@@ -418,7 +421,7 @@ public class MatchServiceImpl implements MatchService {
 
     private MatchResponseDTO convertToDetailedMatchResponseDTO(Match match) {
         MatchResponseDTO response = convertToMatchResponseDTO(match);
-        
+
         // Add tournament details
         response.setTournament(MatchResponseDTO.TournamentDTO.builder()
                 .id(match.getTournament().getId())
@@ -440,14 +443,14 @@ public class MatchServiceImpl implements MatchService {
                 ));
 
         List<TournamentMatchesResponseDTO.TournamentBracketDTO.RoundDTO> rounds = new ArrayList<>();
-        
+
         for (Map.Entry<Integer, List<Long>> entry : matchesByRound.entrySet()) {
             int roundNumber = entry.getKey();
             List<Long> matchIds = entry.getValue();
-            
+
             Integer maxRound = matchRepository.findMaxRoundByTournament(matches.get(0).getTournament());
             String roundName = generateRoundName(roundNumber, maxRound != null ? maxRound : roundNumber);
-            
+
             rounds.add(TournamentMatchesResponseDTO.TournamentBracketDTO.RoundDTO.builder()
                     .roundNumber(roundNumber)
                     .roundName(roundName)
@@ -466,12 +469,12 @@ public class MatchServiceImpl implements MatchService {
     private TournamentBracketResponseDTO.BracketDTO.RoundDTO.MatchBracketDTO convertToMatchBracketDTO(Match match) {
         return TournamentBracketResponseDTO.BracketDTO.RoundDTO.MatchBracketDTO.builder()
                 .id(match.getId())
-                .team1(match.getTeam1() != null ? 
+                .team1(match.getTeam1() != null ?
                         TournamentBracketResponseDTO.BracketDTO.RoundDTO.MatchBracketDTO.TeamBracketDTO.builder()
                                 .id(match.getTeam1().getId())
                                 .name(match.getTeam1().getName())
                                 .build() : null)
-                .team2(match.getTeam2() != null ? 
+                .team2(match.getTeam2() != null ?
                         TournamentBracketResponseDTO.BracketDTO.RoundDTO.MatchBracketDTO.TeamBracketDTO.builder()
                                 .id(match.getTeam2().getId())
                                 .name(match.getTeam2().getName())
@@ -486,47 +489,48 @@ public class MatchServiceImpl implements MatchService {
     private boolean generateNextRoundMatch(Match completedMatch, Team winner) {
         Tournament tournament = completedMatch.getTournament();
         int currentRound = completedMatch.getRoundNumber();
-        
+
         // Check if all matches in current round are completed
         List<Match> currentRoundMatches = matchRepository.findByTournamentAndRound(tournament, currentRound);
         boolean allMatchesCompleted = currentRoundMatches.stream()
                 .allMatch(match -> match.getStatus() == Match.MatchStatus.COMPLETED && match.getWinnerTeam() != null);
-        
+
         if (!allMatchesCompleted) {
             return false; // Wait for all matches in current round to complete
         }
-        
-        // Get all winners from current round
+
+        // Get all winners from current round - with null checks
         List<Team> winners = currentRoundMatches.stream()
+                .filter(match -> match.getTeam1() != null && match.getTeam2() != null) // Check teams exist
                 .map(Match::getWinnerTeam)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        
+
         if (winners.size() < 2) {
             // Tournament completed - only one winner left
             completeTournamentWithWinner(tournament, winners.isEmpty() ? null : winners.get(0));
             return true;
         }
-        
+
         int nextRound = currentRound + 1;
-        
+
         // Get existing skeleton matches for next round
         List<Match> nextRoundMatches = matchRepository.findByTournamentAndRound(tournament, nextRound);
-        
+
         if (nextRoundMatches.isEmpty()) {
             log.warn("No skeleton matches found for round {}", nextRound);
             return false;
         }
-        
+
         // Random shuffle winners for next round
         Collections.shuffle(winners);
-        
+
         // Populate next round matches with winners
         nextRoundMatches.sort(Comparator.comparing(Match::getMatchNumber));
-        
+
         int winnerIndex = 0;
         boolean updated = false;
-        
+
         for (Match nextMatch : nextRoundMatches) {
             if (winnerIndex < winners.size() && nextMatch.getTeam1() == null) {
                 nextMatch.setTeam1(winners.get(winnerIndex++));
@@ -536,19 +540,19 @@ public class MatchServiceImpl implements MatchService {
                 nextMatch.setTeam2(winners.get(winnerIndex++));
                 updated = true;
             }
-            
+
             if (updated) {
                 nextMatch.setLastUpdatedAt(Instant.now().toEpochMilli());
             }
         }
-        
+
         if (updated) {
             matchRepository.saveAll(nextRoundMatches);
         }
-        
+
         return updated;
     }
-    
+
     private void completeTournamentWithWinner(Tournament tournament, Team winner) {
         if (winner != null) {
             // Find runner-up from final match
@@ -557,23 +561,25 @@ public class MatchServiceImpl implements MatchService {
                 List<Match> finalMatches = matchRepository.findByTournamentAndRound(tournament, maxRound);
                 if (!finalMatches.isEmpty()) {
                     Match finalMatch = finalMatches.get(0);
-                    Team runnerUp = finalMatch.getTeam1().getId().equals(winner.getId()) ? 
-                            finalMatch.getTeam2() : finalMatch.getTeam1();
-                    
-                    tournament.setRunnerUpTeam(runnerUp);
+                    // Check null before comparing IDs
+                    if (finalMatch.getTeam1() != null && finalMatch.getTeam2() != null) {
+                        Team runnerUp = finalMatch.getTeam1().getId().equals(winner.getId()) ?
+                                finalMatch.getTeam2() : finalMatch.getTeam1();
+                        tournament.setRunnerUpTeam(runnerUp);
+                    }
                 }
             }
-            
+
             tournament.setWinnerTeam(winner);
         }
-        
+
         tournament.setStatus(TournamentStatus.COMPLETED);
         tournament.setEndDate(LocalDateTime.now());
         tournament.setLastUpdatedAt(Instant.now().toEpochMilli());
-        
+
         tournamentRepository.save(tournament);
-        
-        log.info("Tournament {} completed with winner: {}", 
+
+        log.info("Tournament {} completed with winner: {}",
                 tournament.getId(), winner != null ? winner.getName() : "No winner");
     }
 
@@ -581,7 +587,7 @@ public class MatchServiceImpl implements MatchService {
         if (maxRound <= 1) {
             return "Chung kết";
         }
-        
+
         switch (maxRound - roundNumber) {
             case 0:
                 return "Chung kết";

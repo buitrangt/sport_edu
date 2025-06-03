@@ -8,18 +8,14 @@ import com.example.checkscam.dto.response.TournamentCreateResponseDTO;
 import com.example.checkscam.dto.response.TournamentUpdateResponseDTO;
 import com.example.checkscam.dto.response.TournamentStartResponseDTO;
 import com.example.checkscam.dto.response.CurrentRoundResponseDTO;
-import com.example.checkscam.entity.Tournament;
-import com.example.checkscam.entity.Team;
-import com.example.checkscam.entity.User;
-import com.example.checkscam.entity.Match;
+import com.example.checkscam.entity.*;
 import com.example.checkscam.exception.DataNotFoundException;
-import com.example.checkscam.repository.TournamentRepository;
-import com.example.checkscam.repository.TeamRepository;
-import com.example.checkscam.repository.UserRepository;
-import com.example.checkscam.repository.MatchRepository;
+import com.example.checkscam.exception.InvalidParamException;
+import com.example.checkscam.repository.*;
 import com.example.checkscam.service.TournamentService;
 import com.example.checkscam.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -34,11 +30,13 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TournamentServiceImpl implements TournamentService {
     private final TournamentRepository tournamentRepository;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final MatchRepository matchRepository;
+    private final TournamentRegistrationRepository tournamentRegistrationRepository;
 
     @Override
     public PaginatedResponseDTO<TournamentResponseDTO> getAllTournaments(TournamentRequestDTO request) {
@@ -136,28 +134,28 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentResponseDTO getTournamentById(Long id) {
         Tournament tournament = tournamentRepository.findById(id)
                 .orElseThrow(() -> new DataNotFoundException("Tournament not found with id: " + id));
-        
+
         TournamentResponseDTO dto = toDTO(tournament);
-        
+
         // Add teams information
         List<Team> teams = teamRepository.findByTournament(tournament);
         List<TournamentResponseDTO.TeamDTO> teamDTOs = teams.stream()
                 .map(this::toTeamDTO)
                 .collect(Collectors.toList());
         dto.setTeams(teamDTOs);
-        
+
         return dto;
     }
-    
+
     @Override
     public CurrentRoundResponseDTO getCurrentRound(Long tournamentId) {
         // Get tournament
         Tournament tournament = tournamentRepository.findById(tournamentId)
                 .orElseThrow(() -> new DataNotFoundException("Tournament not found with id: " + tournamentId));
-        
+
         // Get all matches for this tournament
         List<Match> allMatches = matchRepository.findByTournament(tournament);
-        
+
         if (allMatches.isEmpty()) {
             // No matches yet - tournament not started
             return CurrentRoundResponseDTO.builder()
@@ -174,29 +172,29 @@ public class TournamentServiceImpl implements TournamentService {
                     .status(tournament.getStatus().name())
                     .build();
         }
-        
+
         // Find max round number
         int maxRound = allMatches.stream()
                 .mapToInt(Match::getRoundNumber)
                 .max()
                 .orElse(1);
-        
+
         // Calculate current round and statistics
         int currentRound = 1;
         int completedRounds = 0;
         String currentRoundName = "Vòng 1";
-        
+
         // Find the current active round
         for (int round = 1; round <= maxRound; round++) {
             final int currentRoundNumber = round; // Make final for lambda
             List<Match> roundMatches = allMatches.stream()
                     .filter(match -> match.getRoundNumber() == currentRoundNumber)
                     .collect(Collectors.toList());
-            
+
             long completedMatches = roundMatches.stream()
                     .filter(match -> match.getStatus() == Match.MatchStatus.COMPLETED)
                     .count();
-            
+
             if (completedMatches == roundMatches.size() && !roundMatches.isEmpty()) {
                 // This round is completed
                 completedRounds = round;
@@ -207,28 +205,28 @@ public class TournamentServiceImpl implements TournamentService {
                 break;
             }
         }
-        
+
         // If all rounds completed, current round is next round
         if (completedRounds == maxRound && maxRound > 0) {
             currentRound = maxRound + 1;
             currentRoundName = "Round " + currentRound;
         }
-        
+
         // Get current round matches and statistics
         final int finalCurrentRound = currentRound; // Make final for lambda
         List<Match> currentRoundMatches = allMatches.stream()
                 .filter(match -> match.getRoundNumber() == finalCurrentRound)
                 .collect(Collectors.toList());
-        
+
         int currentRoundMatchCount = currentRoundMatches.size();
         int completedCurrentRoundMatches = (int) currentRoundMatches.stream()
                 .filter(match -> match.getStatus() == Match.MatchStatus.COMPLETED)
                 .count();
-        
-        boolean isRoundComplete = currentRoundMatchCount > 0 && 
+
+        boolean isRoundComplete = currentRoundMatchCount > 0 &&
                 completedCurrentRoundMatches == currentRoundMatchCount;
         boolean canAdvanceToNextRound = isRoundComplete && currentRound <= maxRound;
-        
+
         return CurrentRoundResponseDTO.builder()
                 .tournamentId(tournamentId)
                 .tournamentName(tournament.getName())
@@ -270,7 +268,7 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setCreatedBy(currentUser);
 
         Tournament savedTournament = tournamentRepository.save(tournament);
-        
+
         // Create response DTO for creation
         TournamentCreateResponseDTO responseDTO = new TournamentCreateResponseDTO();
         responseDTO.setId(savedTournament.getId());
@@ -280,7 +278,7 @@ public class TournamentServiceImpl implements TournamentService {
         responseDTO.setCurrentTeams(0);
         responseDTO.setCreatedAt(LocalDateTime.ofInstant(
                 Instant.ofEpochMilli(savedTournament.getCreatedAt()), ZoneId.of("UTC")));
-        
+
         return responseDTO;
     }
 
@@ -327,12 +325,12 @@ public class TournamentServiceImpl implements TournamentService {
         if (request.getContactInfo() != null) {
             tournament.setContactInfo(request.getContactInfo());
         }
-        
+
         tournament.setLastUpdatedAt(System.currentTimeMillis());
         tournament.setLastUpdatedBy(currentUser);
 
         Tournament savedTournament = tournamentRepository.save(tournament);
-        
+
         // Create update response DTO
         TournamentUpdateResponseDTO responseDTO = new TournamentUpdateResponseDTO();
         responseDTO.setId(savedTournament.getId());
@@ -340,7 +338,7 @@ public class TournamentServiceImpl implements TournamentService {
         responseDTO.setMaxTeams(savedTournament.getMaxTeams());
         responseDTO.setLastUpdatedAt(LocalDateTime.ofInstant(
                 Instant.ofEpochMilli(savedTournament.getLastUpdatedAt()), ZoneId.of("UTC")));
-        
+
         return responseDTO;
     }
 
@@ -349,13 +347,58 @@ public class TournamentServiceImpl implements TournamentService {
     public void deleteTournament(Long id) {
         Tournament tournament = tournamentRepository.findById(id)
                 .orElseThrow(() -> new DataNotFoundException("Tournament not found with id: " + id));
-        
-        // Check if tournament can be deleted (e.g., not started yet)
-        if (tournament.getStatus() == TournamentStatus.ONGOING) {
-            throw new RuntimeException("Cannot delete a tournament that is currently ongoing");
+
+        // Get current user for authorization (optional)
+        String currentUserEmail = SecurityUtil.getCurrentUserLogin()
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new DataNotFoundException("User not found"));
+
+        // Validate deletion safety
+        validateTournamentDeletion(tournament);
+
+        try {
+            log.info("Starting deletion of tournament {} by user {}", id, currentUser.getEmail());
+
+            // Step 1: Delete all tournament registrations first
+            List<TournamentRegistration> registrations = tournamentRegistrationRepository.findByTournament(tournament);
+            if (!registrations.isEmpty()) {
+                tournamentRegistrationRepository.deleteAll(registrations);
+                log.info("Deleted {} tournament registrations for tournament {}", registrations.size(), id);
+            }
+
+            // Step 2: Delete all matches belonging to this tournament
+            List<Match> matches = matchRepository.findByTournament(tournament);
+            if (!matches.isEmpty()) {
+                matchRepository.deleteAll(matches);
+                log.info("Deleted {} matches for tournament {}", matches.size(), id);
+            }
+
+            // Step 3: Handle winner/runner-up relationships
+            // Clear any tournaments that reference this tournament's teams as winners
+            if (tournament.getWinnerTeam() != null || tournament.getRunnerUpTeam() != null) {
+                // Update tournament to clear these references first
+                tournament.setWinnerTeam(null);
+                tournament.setRunnerUpTeam(null);
+                tournamentRepository.save(tournament);
+                log.info("Cleared winner/runner-up references for tournament {}", id);
+            }
+
+            // Step 4: Delete all teams belonging to this tournament
+            List<Team> teams = teamRepository.findByTournament(tournament);
+            if (!teams.isEmpty()) {
+                teamRepository.deleteAll(teams);
+                log.info("Deleted {} teams for tournament {}", teams.size(), id);
+            }
+
+            // Step 5: Finally delete the tournament
+            tournamentRepository.delete(tournament);
+            log.info("Successfully deleted tournament {}", id);
+
+        } catch (Exception e) {
+            log.error("Error deleting tournament {}: {}", id, e.getMessage(), e);
+            throw new InvalidParamException("Failed to delete tournament: " + e.getMessage());
         }
-        
-        tournamentRepository.delete(tournament);
     }
 
     @Override
@@ -363,39 +406,69 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentStartResponseDTO startTournament(Long id) {
         Tournament tournament = tournamentRepository.findById(id)
                 .orElseThrow(() -> new DataNotFoundException("Tournament not found with id: " + id));
-        
+
         if (tournament.getStatus() != TournamentStatus.REGISTRATION) {
             throw new RuntimeException("Tournament is not in registration status");
         }
-        
+
         // Check if we have enough teams
         int teamCount = teamRepository.countByTournament(tournament);
         if (teamCount < 2) {
             throw new RuntimeException("Need at least 2 teams to start tournament");
         }
-        
+
         // Update tournament status
         tournament.setStatus(TournamentStatus.ONGOING);
         tournament.setLastUpdatedAt(System.currentTimeMillis());
         tournamentRepository.save(tournament);
-        
+
         // TODO: Generate matches here
         int matchesGenerated = generateMatches(tournament);
-        
+
         TournamentStartResponseDTO result = new TournamentStartResponseDTO();
         result.setId(tournament.getId());
         result.setStatus(tournament.getStatus());
         result.setMatchesGenerated(matchesGenerated);
-        
+
         return result;
     }
-    
+
+    /**
+     * Validate if tournament can be safely deleted
+     */
+    private void validateTournamentDeletion(Tournament tournament) {
+        // Check if tournament is currently ongoing
+        if (tournament.getStatus() == TournamentStatus.ONGOING) {
+            throw new InvalidParamException("Cannot delete a tournament that is currently ongoing");
+        }
+
+        // Optional: Check if tournament has completed matches (might want to archive instead)
+        try {
+            List<Match> completedMatches = matchRepository.findByTournamentAndStatus(
+                    tournament, Match.MatchStatus.COMPLETED);
+
+            if (!completedMatches.isEmpty()) {
+                log.warn("Deleting tournament {} with {} completed matches",
+                        tournament.getId(), completedMatches.size());
+                // You might want to throw an exception here if you prefer archiving over deletion
+                // throw new InvalidParamException(
+                //     "Cannot delete tournament with completed matches (" +
+                //     completedMatches.size() + " matches). Consider archiving instead."
+                // );
+            }
+        } catch (Exception e) {
+            // If the method doesn't exist in repository, just log and continue
+            log.debug("Could not check completed matches for tournament {}: {}",
+                    tournament.getId(), e.getMessage());
+        }
+    }
+
     private int generateMatches(Tournament tournament) {
         // Simple implementation - just return team count for now
         // In real implementation, you would create match entities based on tournament format
         return teamRepository.countByTournament(tournament);
     }
-    
+
     private TournamentResponseDTO.TeamDTO toTeamDTO(Team team) {
         TournamentResponseDTO.TeamDTO dto = new TournamentResponseDTO.TeamDTO();
         dto.setId(team.getId());
@@ -403,14 +476,14 @@ public class TournamentServiceImpl implements TournamentService {
         dto.setTeamColor(team.getTeamColor());
         dto.setMemberCount(team.getMemberCount());
         dto.setStatus(team.getStatus().name());
-        
+
         if (team.getCaptain() != null) {
             TournamentResponseDTO.UserDTO captainDTO = new TournamentResponseDTO.UserDTO();
             captainDTO.setId(team.getCaptain().getId());
             captainDTO.setName(team.getCaptain().getName());
             dto.setCaptain(captainDTO);
         }
-        
+
         return dto;
     }
 }
